@@ -13,6 +13,15 @@ let package = Package(
   ],
   targets: [
     .target(
+      name: "ReminderKitBridge",
+      dependencies: [],
+      path: "Sources/ReminderKitBridge",
+      publicHeadersPath: "include",
+      linkerSettings: [
+        .linkedFramework("Foundation"),
+      ]
+    ),
+    .target(
       name: "RemindCore",
       dependencies: [],
       linkerSettings: [
@@ -24,6 +33,7 @@ let package = Package(
       name: "remindctl",
       dependencies: [
         "RemindCore",
+        "ReminderKitBridge",
         .product(name: "Commander", package: "Commander"),
       ],
       exclude: [

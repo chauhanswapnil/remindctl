@@ -12,6 +12,7 @@ struct HelpPrinterTests {
       SearchCommand.spec,
       InfoCommand.spec,
       AddCommand.spec,
+      AssignCommand.spec,
       StatusCommand.spec,
       AuthorizeCommand.spec,
       DoctorCommand.spec,
@@ -27,11 +28,21 @@ struct HelpPrinterTests {
     #expect(joined.contains("search"))
     #expect(joined.contains("info"))
     #expect(joined.contains("add"))
+    #expect(joined.contains("assign"))
     #expect(joined.contains("status"))
     #expect(joined.contains("authorize"))
     #expect(joined.contains("doctor"))
     #expect(joined.contains("export"))
     #expect(joined.contains("completion"))
+  }
+
+  @Test("Assignment help describes participant and clearing options")
+  func assignmentHelp() {
+    let help = HelpPrinter.renderCommand(rootName: "remindctl", spec: AssignCommand.spec).joined(separator: "\n")
+
+    #expect(help.contains("assignee"))
+    #expect(help.contains("--none"))
+    #expect(help.contains("private ReminderKit"))
   }
 
   @Test("Add and edit help include alarm, location, repeat, and URL options")

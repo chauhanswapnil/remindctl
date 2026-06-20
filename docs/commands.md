@@ -68,6 +68,16 @@ remindctl edit 4A83 --no-repeat
 
 `edit`, `complete`, and `delete` accept indexes from the current default listing or ID prefixes.
 
+## Assign shared reminders
+
+```bash
+remindctl assign 4A83 "person@example.com"
+remindctl assign 4A83 "Alex Smith"
+remindctl assign 4A83 --none
+```
+
+Assignment is experimental and uses Apple's private ReminderKit framework because EventKit does not expose shared-list assignments. The assignee must already be a participant in the reminder's shared list. Prefer an exact email address when names are ambiguous.
+
 ## Lists
 
 ```bash

@@ -17,6 +17,7 @@ struct CommandRouter {
       InfoCommand.spec,
       AddCommand.spec,
       EditCommand.spec,
+      AssignCommand.spec,
       CompleteCommand.spec,
       DeleteCommand.spec,
       StatusCommand.spec,
