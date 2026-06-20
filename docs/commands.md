@@ -73,6 +73,7 @@ remindctl edit 4A83 --no-repeat
 ```bash
 remindctl assign 4A83 "person@example.com"
 remindctl assign 4A83 "Alex Smith"
+remindctl assign 4A83 --list-assignees
 remindctl assign 4A83 --none
 ```
 

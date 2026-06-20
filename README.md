@@ -74,6 +74,7 @@ Indexes such as `1` come from the default reminder listing. Most commands also a
 | `remindctl add <title>` | Create a reminder |
 | `remindctl edit <id>` | Edit a reminder by index or ID prefix |
 | `remindctl assign <id> <participant>` | Assign a shared-list reminder (experimental) |
+| `remindctl assign <id> --list-assignees` | List assignable shared-list participants |
 | `remindctl complete <id...>` | Mark reminders complete |
 | `remindctl delete <id...>` | Delete reminders |
 | `remindctl status` | Show Reminders permission status |

@@ -42,6 +42,7 @@ struct HelpPrinterTests {
 
     #expect(help.contains("assignee"))
     #expect(help.contains("--none"))
+    #expect(help.contains("--list-assignees"))
     #expect(help.contains("private ReminderKit"))
   }
 

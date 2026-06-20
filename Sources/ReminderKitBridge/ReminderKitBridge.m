@@ -81,7 +81,7 @@ static NSString *RKShareeIdentifier(id sharee) {
 }
 
 static BOOL RKMatches(NSString *candidate, NSString *query) {
-  if (!candidate.length) return NO;
+  if (!candidate.length || !query.length) return NO;
   NSStringCompareOptions options = NSCaseInsensitiveSearch | NSDiacriticInsensitiveSearch;
   return [candidate compare:query options:options] == NSOrderedSame;
 }
@@ -114,6 +114,92 @@ static id RKResolveSharee(NSArray *sharees, NSString *query, NSError **error) {
   return nil;
 }
 
+static BOOL RKFetchSharedReminder(
+  NSString *reminderIdentifier,
+  id *storeResult,
+  id *reminderResult,
+  id *listResult,
+  NSError **error
+) {
+  if (!RKLoadFramework(error)) return NO;
+
+  Class storeClass = NSClassFromString(@"REMStore");
+  if (!storeClass) {
+    if (error) *error = RKError(6, @"This macOS version does not expose the required ReminderKit classes");
+    return NO;
+  }
+
+  id reminderObjectID = RKObjectID(@"REMCDReminder", reminderIdentifier, error);
+  if (!reminderObjectID) return NO;
+
+  id store = [[storeClass alloc] init];
+  if (![store respondsToSelector:@selector(fetchReminderWithObjectID:error:)]) {
+    if (error) *error = RKError(7, @"This macOS version does not support ReminderKit reminder lookup");
+    return NO;
+  }
+  NSError *fetchError = nil;
+  id reminder = [store fetchReminderWithObjectID:reminderObjectID error:&fetchError];
+  if (!reminder) {
+    if (error) *error = fetchError ?: RKError(8, @"ReminderKit could not find the reminder");
+    return NO;
+  }
+
+  id list = [reminder respondsToSelector:@selector(list)] ? [reminder list] : nil;
+  if (!list || ![list respondsToSelector:@selector(isShared)] || ![list isShared]) {
+    if (error) *error = RKError(9, @"Assignments are only supported for reminders in shared lists");
+    return NO;
+  }
+
+  if (storeResult) *storeResult = store;
+  if (reminderResult) *reminderResult = reminder;
+  if (listResult) *listResult = list;
+  return YES;
+}
+
+NSArray<NSDictionary<NSString *, id> *> *RKListReminderAssignees(
+  NSString *reminderIdentifier,
+  NSError **error
+) {
+  @try {
+    id list = nil;
+    if (!RKFetchSharedReminder(reminderIdentifier, nil, nil, &list, error)) return nil;
+
+    NSArray *sharees = [list respondsToSelector:@selector(sharees)] ? [list sharees] : nil;
+    NSString *currentIdentifier = RKString(list, @selector(currentUserShareParticipantID));
+    if (![sharees isKindOfClass:[NSArray class]]) {
+      if (error) *error = RKError(12, @"Could not read shared-list participants from ReminderKit");
+      return nil;
+    }
+
+    NSMutableArray<NSDictionary<NSString *, id> *> *result = [NSMutableArray array];
+    for (id sharee in sharees) {
+      NSString *identifier = RKShareeIdentifier(sharee);
+      if (!identifier.length) continue;
+      NSString *name = RKString(sharee, @selector(displayName));
+      NSString *address = RKString(sharee, @selector(address));
+      NSMutableDictionary<NSString *, id> *entry = [@{
+        @"id": identifier,
+        @"isCurrentUser": @(RKMatches(identifier, currentIdentifier)),
+      } mutableCopy];
+      if (name.length) entry[@"name"] = name;
+      if (address.length) entry[@"address"] = address;
+      [result addObject:entry];
+    }
+    [result sortUsingComparator:^NSComparisonResult(NSDictionary *left, NSDictionary *right) {
+      NSString *leftLabel = left[@"name"] ?: left[@"address"] ?: left[@"id"];
+      NSString *rightLabel = right[@"name"] ?: right[@"address"] ?: right[@"id"];
+      return [leftLabel localizedCaseInsensitiveCompare:rightLabel];
+    }];
+    return result;
+  } @catch (NSException *exception) {
+    if (error) {
+      NSString *message = [NSString stringWithFormat:@"ReminderKit participant lookup failed: %@", exception.reason ?: exception.name];
+      *error = RKError(18, message);
+    }
+    return nil;
+  }
+}
+
 NSDictionary<NSString *, id> *RKSetReminderAssignment(
   NSString *reminderIdentifier,
   NSString *assignee,
@@ -121,34 +207,16 @@ NSDictionary<NSString *, id> *RKSetReminderAssignment(
 ) {
   @try {
     if (!RKLoadFramework(error)) return nil;
-
-    Class storeClass = NSClassFromString(@"REMStore");
     Class saveClass = NSClassFromString(@"REMSaveRequest");
-    if (!storeClass || !saveClass) {
+    if (!saveClass) {
       if (error) *error = RKError(6, @"This macOS version does not expose the required ReminderKit classes");
       return nil;
     }
 
-    id reminderObjectID = RKObjectID(@"REMCDReminder", reminderIdentifier, error);
-    if (!reminderObjectID) return nil;
-
-    id store = [[storeClass alloc] init];
-    if (![store respondsToSelector:@selector(fetchReminderWithObjectID:error:)]) {
-      if (error) *error = RKError(7, @"This macOS version does not support ReminderKit reminder lookup");
-      return nil;
-    }
-    NSError *fetchError = nil;
-    id reminder = [store fetchReminderWithObjectID:reminderObjectID error:&fetchError];
-    if (!reminder) {
-      if (error) *error = fetchError ?: RKError(8, @"ReminderKit could not find the reminder");
-      return nil;
-    }
-
-    id list = [reminder respondsToSelector:@selector(list)] ? [reminder list] : nil;
-    if (!list || ![list respondsToSelector:@selector(isShared)] || ![list isShared]) {
-      if (error) *error = RKError(9, @"Assignments are only supported for reminders in shared lists");
-      return nil;
-    }
+    id store = nil;
+    id reminder = nil;
+    id list = nil;
+    if (!RKFetchSharedReminder(reminderIdentifier, &store, &reminder, &list, error)) return nil;
 
     id save = [[saveClass alloc] initWithStore:store];
     if (![save respondsToSelector:@selector(updateReminder:)]) {

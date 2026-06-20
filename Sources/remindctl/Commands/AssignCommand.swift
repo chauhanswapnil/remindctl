@@ -15,6 +15,11 @@ enum AssignCommand {
             .make(label: "assignee", help: "Participant name or email", isOptional: true),
           ],
           flags: [
+            .make(
+              label: "listAssignees",
+              names: [.long("list-assignees")],
+              help: "List participants who can be assigned"
+            ),
             .make(label: "none", names: [.long("none")], help: "Clear the current assignment")
           ]
         )
@@ -22,6 +27,7 @@ enum AssignCommand {
       usageExamples: [
         "remindctl assign 1 \"person@example.com\"",
         "remindctl assign 4A83 \"Alex Smith\"",
+        "remindctl assign 4A83 --list-assignees",
         "remindctl assign 4A83 --none",
       ]
     ) { values, runtime in
@@ -30,11 +36,13 @@ enum AssignCommand {
       }
       let assignee = values.argument(1)
       let clear = values.flag("none")
-      if clear && assignee != nil {
-        throw RemindCoreError.operationFailed("Use either an assignee or --none, not both")
+      let listAssignees = values.flag("listAssignees")
+      if [assignee != nil, clear, listAssignees].filter({ $0 }).count > 1 {
+        throw RemindCoreError.operationFailed("Use an assignee, --none, or --list-assignees")
       }
-      if !clear && assignee == nil {
-        throw RemindCoreError.operationFailed("Provide a participant name or email, or use --none")
+      if !clear && !listAssignees && assignee == nil {
+        throw RemindCoreError.operationFailed(
+          "Provide a participant name or email, use --none, or use --list-assignees")
       }
 
       let store = RemindersStore()
@@ -45,11 +53,39 @@ enum AssignCommand {
         throw RemindCoreError.reminderNotFound(input)
       }
 
+      if listAssignees {
+        let options = try PrivateReminderAssignment.listAssignees(reminderID: reminder.id)
+        printAssignees(options, format: runtime.outputFormat)
+        return
+      }
+
       let result = try PrivateReminderAssignment.set(
         reminderID: reminder.id,
         assignee: clear ? nil : assignee
       )
       printResult(result, reminder: reminder, format: runtime.outputFormat)
+    }
+  }
+
+  private static func printAssignees(_ options: [ReminderAssigneeOption], format: OutputFormat) {
+    switch format {
+    case .json:
+      OutputRenderer.printJSON(options)
+    case .plain:
+      for option in options {
+        Swift.print([option.id, option.name ?? "", option.address ?? "", option.isCurrentUser ? "1" : "0"].joined(separator: "\t"))
+      }
+    case .quiet:
+      Swift.print(options.count)
+    case .standard, .table:
+      guard !options.isEmpty else {
+        Swift.print("No assignable participants found")
+        return
+      }
+      Swift.print("ID\tParticipant\tCurrent account")
+      for option in options {
+        Swift.print("\(option.id)\t\(option.label)\t\(option.isCurrentUser ? "yes" : "")")
+      }
     }
   }
 

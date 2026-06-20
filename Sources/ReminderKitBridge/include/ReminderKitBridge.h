@@ -11,4 +11,10 @@ FOUNDATION_EXPORT NSDictionary<NSString *, id> * _Nullable RKSetReminderAssignme
   NSError **error
 );
 
+/// Lists participants who can be assigned a reminder in its shared list.
+FOUNDATION_EXPORT NSArray<NSDictionary<NSString *, id> *> * _Nullable RKListReminderAssignees(
+  NSString *reminderIdentifier,
+  NSError **error
+);
+
 NS_ASSUME_NONNULL_END

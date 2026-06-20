@@ -17,7 +17,40 @@ struct ReminderAssignmentResult: Codable, Sendable, Equatable {
   }
 }
 
+struct ReminderAssigneeOption: Codable, Sendable, Equatable {
+  let id: String
+  let name: String?
+  let address: String?
+  let isCurrentUser: Bool
+
+  var label: String {
+    if let name, let address { return "\(name) <\(address)>" }
+    return name ?? address ?? id
+  }
+}
+
 enum PrivateReminderAssignment {
+  static func listAssignees(reminderID: String) throws -> [ReminderAssigneeOption] {
+    var error: NSError?
+    guard let payload = RKListReminderAssignees(reminderID, &error) else {
+      throw RemindCoreError.operationFailed(
+        error?.localizedDescription ?? "ReminderKit participant lookup failed without an error message")
+    }
+    return try payload.map { item in
+      guard let id = item["id"] as? String,
+        let isCurrentUser = item["isCurrentUser"] as? Bool
+      else {
+        throw RemindCoreError.operationFailed("ReminderKit returned an invalid participant result")
+      }
+      return ReminderAssigneeOption(
+        id: id,
+        name: item["name"] as? String,
+        address: item["address"] as? String,
+        isCurrentUser: isCurrentUser
+      )
+    }
+  }
+
   static func set(reminderID: String, assignee: String?) throws -> ReminderAssignmentResult {
     var error: NSError?
     guard let payload = RKSetReminderAssignment(reminderID, assignee, &error) else {
