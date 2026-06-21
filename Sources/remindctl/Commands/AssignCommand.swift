@@ -1,0 +1,112 @@
+import Commander
+import Foundation
+import RemindCore
+
+enum AssignCommand {
+  static var spec: CommandSpec {
+    CommandSpec(
+      name: "assign",
+      abstract: "Assign a shared-list reminder",
+      discussion: "Experimental: uses Apple's private ReminderKit framework.",
+      signature: CommandSignatures.withRuntimeFlags(
+        CommandSignature(
+          arguments: [
+            .make(label: "id", help: "Index or ID prefix", isOptional: false),
+            .make(label: "assignee", help: "Participant name or email", isOptional: true),
+          ],
+          flags: [
+            .make(
+              label: "listAssignees",
+              names: [.long("list-assignees")],
+              help: "List participants who can be assigned"
+            ),
+            .make(label: "none", names: [.long("none")], help: "Clear the current assignment")
+          ]
+        )
+      ),
+      usageExamples: [
+        "remindctl assign 1 \"person@example.com\"",
+        "remindctl assign 4A83 \"Alex Smith\"",
+        "remindctl assign 4A83 --list-assignees",
+        "remindctl assign 4A83 --none",
+      ]
+    ) { values, runtime in
+      guard let input = values.argument(0) else {
+        throw ParsedValuesError.missingArgument("id")
+      }
+      let assignee = values.argument(1)
+      let clear = values.flag("none")
+      let listAssignees = values.flag("listAssignees")
+      if [assignee != nil, clear, listAssignees].filter({ $0 }).count > 1 {
+        throw RemindCoreError.operationFailed("Use an assignee, --none, or --list-assignees")
+      }
+      if !clear && !listAssignees && assignee == nil {
+        throw RemindCoreError.operationFailed(
+          "Provide a participant name or email, use --none, or use --list-assignees")
+      }
+
+      let store = RemindersStore()
+      try await store.requestAccess()
+      let reminders = try await store.reminders(in: nil)
+      let resolved = try CommandHelpers.resolveShowIdentifiers([input], from: reminders)
+      guard let reminder = resolved.first else {
+        throw RemindCoreError.reminderNotFound(input)
+      }
+
+      if listAssignees {
+        let options = try PrivateReminderAssignment.listAssignees(reminderID: reminder.id)
+        printAssignees(options, format: runtime.outputFormat)
+        return
+      }
+
+      let result = try PrivateReminderAssignment.set(
+        reminderID: reminder.id,
+        assignee: clear ? nil : assignee
+      )
+      printResult(result, reminder: reminder, format: runtime.outputFormat)
+    }
+  }
+
+  private static func printAssignees(_ options: [ReminderAssigneeOption], format: OutputFormat) {
+    switch format {
+    case .json:
+      OutputRenderer.printJSON(options)
+    case .plain:
+      for option in options {
+        Swift.print([option.id, option.name ?? "", option.address ?? "", option.isCurrentUser ? "1" : "0"].joined(separator: "\t"))
+      }
+    case .quiet:
+      Swift.print(options.count)
+    case .standard, .table:
+      guard !options.isEmpty else {
+        Swift.print("No assignable participants found")
+        return
+      }
+      Swift.print("ID\tParticipant\tCurrent account")
+      for option in options {
+        Swift.print("\(option.id)\t\(option.label)\t\(option.isCurrentUser ? "yes" : "")")
+      }
+    }
+  }
+
+  private static func printResult(
+    _ result: ReminderAssignmentResult,
+    reminder: ReminderItem,
+    format: OutputFormat
+  ) {
+    switch format {
+    case .json:
+      OutputRenderer.printJSON(result)
+    case .plain:
+      Swift.print([result.reminderId, result.cleared ? "" : (result.assigneeLabel ?? "")].joined(separator: "\t"))
+    case .quiet:
+      break
+    case .standard, .table:
+      if result.cleared {
+        Swift.print("Cleared assignment for \"\(reminder.title)\"")
+      } else {
+        Swift.print("Assigned \"\(reminder.title)\" to \(result.assigneeLabel ?? "participant")")
+      }
+    }
+  }
+}
